@@ -5,7 +5,7 @@
 }:
 
 rustPlatform.buildRustPackage {
-  pname = "nix-store-veritysetup-generator";
+  pname = "ghaf-store-veritysetup-generator";
   version = "0.1.0";
 
   src = ./rust;

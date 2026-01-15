@@ -1,3 +1,10 @@
+# ghaf-store-veritysetup-generator
+
+Ghaf specific fork of [`nix-store-veritysetup-generator`](https://github.com/nikstur/nix-store-veritysetup-generator)
+
+We use LVM volumes for both store and verity data, volumes identified by pair
+of `ghaf.revision` + fragment of `storehash`
+
 # nix-store-veritysetup-generator
 
 Like `systemd-veritysetup-generator` but for the Nix Store.

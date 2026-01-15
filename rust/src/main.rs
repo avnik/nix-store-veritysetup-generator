@@ -5,58 +5,67 @@ use std::fs;
 use std::process::Command;
 
 use anyhow::{anyhow, Context, Result};
-use uuid::Uuid;
 
 const SYSTEMD_VERITYSETUP_PATH: &str = std::env!("SYSTEMD_VERITYSETUP_PATH");
 const SYSTEMD_ESCAPE_PATH: &str = std::env!("SYSTEMD_ESCAPE_PATH");
+const LUKS_VOLUME_GROUP: &str = "pool"; // FIXME: replace with std::env!("LUKS_VOLUME_GROUP") at final phase
+const NIX_STORE: &str = "nix-store"; // FIXME: replace with std::env!("NIX_STORE") at final phase
 
 /// The name of the service to create
 const SERVICE_NAME: &str = "systemd-veritysetup@nix-store.service";
 
 /// The name of the kernel commandline argument
 const CMDLINE_ARG_NAME: &str = "storehash";
+const GHAF_REVISION_NAME: &str = "ghaf.revision";
 
 #[derive(Debug)]
-struct Storehash(String);
+struct Storehash {
+    hash: String,
+    revision: String,
+}
 
 impl Storehash {
+    fn find_arg<'a>(cmdline: &'a str, key: &str) -> Option<&'a str> {
+        cmdline
+            .split_whitespace()
+            .filter_map(|s| s.split_once('='))
+            .find_map(|(k, v)| (k == key).then_some(v))
+    }
+
     /// Parse the storehash from a provided kernel commandline
     fn from_cmdline(cmdline: &str) -> Option<Self> {
-        let storehash_arg = cmdline
-            .split_whitespace()
-            .find(|&s| s.contains(&format!("{CMDLINE_ARG_NAME}=")));
+        Some(Self {
+            hash: Self::find_arg(cmdline, CMDLINE_ARG_NAME)?.into(),
+            revision: Self::find_arg(cmdline, GHAF_REVISION_NAME)?.into(),
+        })
+    }
 
-        storehash_arg
-            .and_then(|s| s.split('=').last())
-            .map(|s| Self(String::from(s)))
+    fn hash_fragment(&self) -> &str {
+        &self.hash[..16]
+    }
+
+    fn volume(&self, part: &str) -> Result<String> {
+        let fragment = self.hash_fragment();
+        Ok(format!(
+            "/dev/mapper/{LUKS_VOLUME_GROUP}-{part}_{rev}_{fragment}",
+            rev = self.revision
+        ))
     }
 
     fn datadevice(&self) -> Result<String> {
-        let data_uuid = convert_to_device_uuid(&self.0[..32])?;
-        Ok(format!("/dev/disk/by-partuuid/{data_uuid}"))
+        self.volume("root")
     }
 
     fn hashdevice(&self) -> Result<String> {
-        let hash_uuid = convert_to_device_uuid(&self.0[32..])?;
-        Ok(format!("/dev/disk/by-partuuid/{hash_uuid}"))
+        self.volume("verity")
     }
 }
 
 impl fmt::Display for Storehash {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+        // .revision is out from formatting intentionally, format used to render into systemd unit
+        self.hash.fmt(f) 
     }
-}
-
-/// Convert a UUID from the simple form to the representation udev uses for devices.
-///
-/// The simple form does not contain hyphens while udev creates devices in `/dev/disk/by-partuuid`
-/// with UUIDs that do contains hyphens.
-fn convert_to_device_uuid(s: &str) -> Result<String> {
-    Ok(Uuid::parse_str(s)
-        .with_context(|| format!("Failed to parse {s} as a UUID"))?
-        .hyphenated()
-        .to_string())
 }
 
 /// Escape a string with `systemd-escape`.
@@ -118,8 +127,8 @@ After={datadevice_unit} {hashdevice_unit}"#
         r#"[Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart={SYSTEMD_VERITYSETUP_PATH} attach nix-store {datadevice} {hashdevice} {storehash}
-ExecStop={SYSTEMD_VERITYSETUP_PATH} detach nix-store"#
+ExecStart={SYSTEMD_VERITYSETUP_PATH} attach {NIX_STORE} {datadevice} {hashdevice} {storehash}
+ExecStop={SYSTEMD_VERITYSETUP_PATH} detach {NIX_STORE}"#
     )?;
 
     Ok(buffer)
@@ -155,12 +164,13 @@ fn generate() -> Result<()> {
         Some(s) => s,
         // If there is no storehash parameter on the cmdline just do nothing.
         None => {
+            log::info!("ghaf-nix-store-veritysetup-generator: no valid parameters in /proc/cmdline, nothing to do");
             return Ok(());
         }
     };
 
     log::info!(
-        "Using verity data device {}, hash device {}, and hash {} for nix-store",
+        "Using verity data device {}, hash device {}, and hash {} for {NIX_STORE}",
         storehash.datadevice()?,
         storehash.hashdevice()?,
         storehash,
@@ -202,15 +212,19 @@ mod tests {
     #[test]
     fn parse_storehash_from_cmdline() {
         let expected_storehash = "94821122dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254";
-        let cmdline = format!("{CMDLINE_ARG_NAME}={expected_storehash}");
+        let expected_revision = "25.12.2";
+        let cmdline = format!(
+            "{CMDLINE_ARG_NAME}={expected_storehash} {GHAF_REVISION_NAME}={expected_revision}"
+        );
         let storehash = Storehash::from_cmdline(&cmdline).unwrap();
-        assert_eq!(storehash.0, expected_storehash);
+        assert_eq!(storehash.hash, expected_storehash);
+        assert_eq!(storehash.revision, expected_revision);
     }
 
     #[test]
     fn write_service_unit() {
         let storehash = Storehash::from_cmdline(&format!(
-            "{CMDLINE_ARG_NAME}=94821122dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254"
+            "{CMDLINE_ARG_NAME}=94821122dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254 {GHAF_REVISION_NAME}=25.12.2"
         ))
         .unwrap();
         let actual_service_file = create_service_file(&storehash).unwrap();
@@ -224,12 +238,12 @@ mod tests {
             Before=blockdev@dev-mapper-%i.target
             Wants=blockdev@dev-mapper-%i.target
             Before=veritysetup.target
-            BindsTo=dev-disk-by\x2dpartuuid-94821122\x2ddbec\x2d8355\x2ddf07\x2df3670177b0cb.device dev-disk-by\x2dpartuuid-147683a3\x2d55c0\x2d7da6\x2da2fb\x2d85313cc02254.device
-            After=dev-disk-by\x2dpartuuid-94821122\x2ddbec\x2d8355\x2ddf07\x2df3670177b0cb.device dev-disk-by\x2dpartuuid-147683a3\x2d55c0\x2d7da6\x2da2fb\x2d85313cc02254.device
+            BindsTo=dev-mapper-pool\x2droot_25.12.2_94821122dbec8355.device dev-mapper-pool\x2dverity_25.12.2_94821122dbec8355.device
+            After=dev-mapper-pool\x2droot_25.12.2_94821122dbec8355.device dev-mapper-pool\x2dverity_25.12.2_94821122dbec8355.device
             [Service]
             Type=oneshot
             RemainAfterExit=yes
-            ExecStart=systemd-veritysetup attach nix-store /dev/disk/by-partuuid/94821122-dbec-8355-df07-f3670177b0cb /dev/disk/by-partuuid/147683a3-55c0-7da6-a2fb-85313cc02254 94821122dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254
+            ExecStart=systemd-veritysetup attach nix-store /dev/mapper/pool-root_25.12.2_94821122dbec8355 /dev/mapper/pool-verity_25.12.2_94821122dbec8355 94821122dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254
             ExecStop=systemd-veritysetup detach nix-store
         "#]];
 

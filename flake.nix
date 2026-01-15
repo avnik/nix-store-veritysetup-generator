@@ -48,14 +48,14 @@
             inherit system;
             overlays = [
               (_final: _prev: {
-                nix-store-veritysetup-generator = config.packages.nix-store-veritysetup-generator;
+                ghaf-store-veritysetup-generator = config.packages.ghaf-store-veritysetup-generator;
               })
             ];
           };
 
           packages = {
-            nix-store-veritysetup-generator = pkgs.callPackage ./. { };
-            default = config.packages.nix-store-veritysetup-generator;
+            ghaf-store-veritysetup-generator = pkgs.callPackage ./. { };
+            default = config.packages.ghaf-store-veritysetup-generator;
           };
 
           checks = import ./nix/tests { inherit pkgs; };
@@ -83,7 +83,7 @@
               pkgs.cargo-edit
             ];
 
-            inputsFrom = [ config.packages.nix-store-veritysetup-generator ];
+            inputsFrom = [ config.packages.ghaf-store-veritysetup-generator ];
 
             # Use a fake path so that the test does not depend on specific Nix
             # store paths.

@@ -20,6 +20,11 @@ in
   options.boot.initrd.systemd.ghaf-store-veritysetup-generator = {
 
     enable = lib.mkEnableOption "ghaf-store-veritysetup-generator";
+    package = lib.mkOption {
+      description = "Package of ghaf-store-veritysetup-generator";
+      type = lib.types.package;
+      default = generator;
+    };
 
   };
 
@@ -35,7 +40,7 @@ in
     boot.initrd.systemd = {
 
       contents = {
-        "/etc/systemd/system-generators/ghaf-store-veritysetup-generator".source = "${pkgs.ghaf-store-veritysetup-generator}/bin/nix-store-veritysetup-generator";
+        "/etc/systemd/system-generators/ghaf-store-veritysetup-generator".source = "${cfg.package}/bin/nix-store-veritysetup-generator";
       };
 
       storePaths = [

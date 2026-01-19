@@ -1,4 +1,4 @@
 {
-  nix-store-veritysetup-generator = ./nix-store-veritysetup-generator.nix;
+  ghaf-store-veritysetup-generator = ./ghaf-store-veritysetup-generator.nix;
   verity = ./verity.nix;
 }

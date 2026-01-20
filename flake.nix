@@ -24,16 +24,14 @@
     flake-parts.lib.mkFlake { inherit inputs; } (_: {
 
       imports = [
-        inputs.flake-parts.flakeModules.easyOverlay
         inputs.pre-commit-hooks-nix.flakeModule
+        ./nix/modules
       ];
 
       systems = [
         "x86_64-linux"
         "aarch64-linux"
       ];
-
-      flake.nixosModules = import ./nix/modules;
 
       perSystem =
         {
@@ -43,16 +41,6 @@
           ...
         }:
         {
-
-          _module.args.pkgs = import inputs.nixpkgs {
-            inherit system;
-            overlays = [
-              (_final: _prev: {
-                ghaf-store-veritysetup-generator = config.packages.ghaf-store-veritysetup-generator;
-              })
-            ];
-          };
-
           packages = {
             ghaf-store-veritysetup-generator = pkgs.callPackage ./. { };
             default = config.packages.ghaf-store-veritysetup-generator;

@@ -14,6 +14,12 @@
         # Use exact systemd that we use in boot, because paths to tools become hardcoded into executable
         # and `storePath` trick stop working
         systemd = config.boot.initrd.systemd.package;
+        inherit (cfg)
+          nixStoreVolumeName
+          volumeGroupName
+          ghafStorehashArgName
+          ghafRevisionArgName
+          ;
       };
 
     in
@@ -27,6 +33,39 @@
           description = "Package of ghaf-store-veritysetup-generator";
           type = lib.types.package;
           default = generator;
+        };
+
+        volumeGroupName = lib.mkOption {
+          type = lib.types.str;
+          default = "pool";
+          description = ''
+            Name of LUKS/LVM volume group to operate on
+            (would be compiled into binary)
+          '';
+        };
+        nixStoreVolumeName = lib.mkOption {
+          type = lib.types.str;
+          default = "nix-store";
+          description = ''
+            Name of volume for /nix/store inside /dev/mapper/* 
+            (would be compiled into binary)
+          '';
+        };
+        ghafStorehashArgName = lib.mkOption {
+          type = lib.types.str;
+          default = "ghaf.storehash";
+          description = ''
+            Name kernel cmdline parameter for store verity hash. 
+            (would be compiled into binary)
+          '';
+        };
+        ghafRevisionArgName = lib.mkOption {
+          type = lib.types.str;
+          default = "ghaf.revision";
+          description = ''
+            Name of kernel cmdline for volume revision 
+            (would be compiled into binary)
+          '';
         };
 
       };

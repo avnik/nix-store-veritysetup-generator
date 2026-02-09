@@ -77,6 +77,10 @@
             # store paths.
             SYSTEMD_VERITYSETUP_PATH = "systemd-veritysetup";
             SYSTEMD_ESCAPE_PATH = "${pkgs.systemd}/bin/systemd-escape";
+            LUKS_VOLUME_GROUP = "pool";
+            NIX_STORE = "nix-store";
+            GHAF_STOREHASH_ARG_NAME = "ghaf.storehash";
+            GHAF_REVISION_ARG_NAME = "ghaf.revision";
 
             RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
           };

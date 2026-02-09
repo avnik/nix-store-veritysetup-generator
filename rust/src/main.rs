@@ -8,15 +8,15 @@ use anyhow::{anyhow, Context, Result};
 
 const SYSTEMD_VERITYSETUP_PATH: &str = std::env!("SYSTEMD_VERITYSETUP_PATH");
 const SYSTEMD_ESCAPE_PATH: &str = std::env!("SYSTEMD_ESCAPE_PATH");
-const LUKS_VOLUME_GROUP: &str = "pool"; // FIXME: replace with std::env!("LUKS_VOLUME_GROUP") at final phase
-const NIX_STORE: &str = "nix-store"; // FIXME: replace with std::env!("NIX_STORE") at final phase
+const LUKS_VOLUME_GROUP: &str = env!("LUKS_VOLUME_GROUP");
+const NIX_STORE: &str = std::env!("GHAF_NIX_STORE_VOLUME");
 
 /// The name of the service to create
 const SERVICE_NAME: &str = "systemd-veritysetup@nix-store.service";
 
 /// The name of the kernel commandline argument
-const CMDLINE_ARG_NAME: &str = "storehash";
-const GHAF_REVISION_NAME: &str = "ghaf.revision";
+const GHAF_STOREHASH_ARG_NAME: &str = env!("GHAF_STOREHASH_ARG_NAME");
+const GHAF_REVISION_ARG_NAME: &str = env!("GHAF_REVISION_ARG_NAME");
 
 #[derive(Debug)]
 struct Storehash {
@@ -34,7 +34,7 @@ impl Storehash {
 
     /// Parse the storehash from a provided kernel commandline
     fn from_cmdline(cmdline: &str) -> Option<Self> {
-        let hash = Self::find_arg(cmdline, CMDLINE_ARG_NAME);
+        let hash = Self::find_arg(cmdline, GHAF_STOREHASH_ARG_NAME);
         if let Some(hash) = hash {
             if !hash.chars().all(|c| c.is_ascii_hexdigit()) || hash.len() != 64 {
                 log::error!("ghaf-store-veritysetup-generator: {hash} is not in valid verity hash format. ignoring");
@@ -43,7 +43,7 @@ impl Storehash {
         }
         Some(Self {
             hash: hash?.into(),
-            revision: Self::find_arg(cmdline, GHAF_REVISION_NAME)?.into(),
+            revision: Self::find_arg(cmdline, GHAF_REVISION_ARG_NAME)?.into(),
         })
     }
 
@@ -221,7 +221,7 @@ mod tests {
         let expected_storehash = "94821122dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254";
         let expected_revision = "25.12.2";
         let cmdline = format!(
-            "{CMDLINE_ARG_NAME}={expected_storehash} {GHAF_REVISION_NAME}={expected_revision}"
+            "{GHAF_STOREHASH_ARG_NAME}={expected_storehash} {GHAF_REVISION_ARG_NAME}={expected_revision}"
         );
         let storehash = Storehash::from_cmdline(&cmdline).unwrap();
         assert_eq!(storehash.hash, expected_storehash);
@@ -233,7 +233,7 @@ mod tests {
         let expected_storehash = "invalid2dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254";
         let expected_revision = "25.12.2";
         let cmdline = format!(
-            "{CMDLINE_ARG_NAME}={expected_storehash} {GHAF_REVISION_NAME}={expected_revision}"
+            "{GHAF_STOREHASH_ARG_NAME}={expected_storehash} {GHAF_REVISION_ARG_NAME}={expected_revision}"
         );
         assert!(Storehash::from_cmdline(&cmdline).is_none())
     }
@@ -244,7 +244,7 @@ mod tests {
         let expected_storehash = "94821122db";
         let expected_revision = "25.12.2";
         let cmdline = format!(
-            "{CMDLINE_ARG_NAME}={expected_storehash} {GHAF_REVISION_NAME}={expected_revision}"
+            "{GHAF_STOREHASH_ARG_NAME}={expected_storehash} {GHAF_REVISION_ARG_NAME}={expected_revision}"
         );
         assert!(Storehash::from_cmdline(&cmdline).is_none())
     }
@@ -252,21 +252,21 @@ mod tests {
     #[test]
     fn missing_hash() {
         let expected_revision = "25.12.2";
-        let cmdline = format!("{GHAF_REVISION_NAME}={expected_revision}");
+        let cmdline = format!("{GHAF_REVISION_ARG_NAME}={expected_revision}");
         assert!(Storehash::from_cmdline(&cmdline).is_none())
     }
 
     #[test]
     fn missing_revision() {
         let expected_storehash = "94821122dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254";
-        let cmdline = format!("{CMDLINE_ARG_NAME}={expected_storehash}");
+        let cmdline = format!("{GHAF_STOREHASH_ARG_NAME}={expected_storehash}");
         assert!(Storehash::from_cmdline(&cmdline).is_none())
     }
 
     #[test]
     fn write_service_unit() {
         let storehash = Storehash::from_cmdline(&format!(
-            "{CMDLINE_ARG_NAME}=94821122dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254 {GHAF_REVISION_NAME}=25.12.2"
+            "{GHAF_STOREHASH_ARG_NAME}=94821122dbec8355df07f3670177b0cb147683a355c07da6a2fb85313cc02254 {GHAF_REVISION_ARG_NAME}=25.12.2"
         ))
         .unwrap();
         let actual_service_file = create_service_file(&storehash).unwrap();

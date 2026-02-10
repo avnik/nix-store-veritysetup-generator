@@ -2,6 +2,10 @@
   lib,
   rustPlatform,
   systemd,
+  volumeGroupName ? "pool",
+  nixStoreVolumeName ? "nix-store",
+  ghafStorehashArgName ? "ghaf.storehash",
+  ghafRevisionArgName ? "ghaf.revision",
 }:
 
 rustPlatform.buildRustPackage {
@@ -17,6 +21,10 @@ rustPlatform.buildRustPackage {
   env = {
     SYSTEMD_VERITYSETUP_PATH = "${systemd}/lib/systemd/systemd-veritysetup";
     SYSTEMD_ESCAPE_PATH = "${systemd}/bin/systemd-escape";
+    LUKS_VOLUME_GROUP = volumeGroupName;
+    GHAF_NIX_STORE_VOLUME = nixStoreVolumeName;
+    GHAF_STOREHASH_ARG_NAME = ghafStorehashArgName;
+    GHAF_REVISION_ARG_NAME = ghafRevisionArgName;
   };
 
   # Use a fake path in tests so that they are not dependent on specific Nix

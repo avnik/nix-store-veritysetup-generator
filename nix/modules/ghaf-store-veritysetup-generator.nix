@@ -1,4 +1,4 @@
-{ self, ... }:
+{ ... }:
 {
   flake.nixosModules.ghaf-store-veritysetup-generator =
     {
@@ -10,7 +10,7 @@
 
     let
       cfg = config.boot.initrd.systemd.ghaf-store-veritysetup-generator;
-      generator = self.packages.${pkgs.hostPlatform.system}.ghaf-store-veritysetup-generator.override {
+      generator = pkgs.callPackage ../../default.nix {
         # Use exact systemd that we use in boot, because paths to tools become hardcoded into executable
         # and `storePath` trick stop working
         systemd = config.boot.initrd.systemd.package;
@@ -82,7 +82,8 @@
         boot.initrd.systemd = {
 
           contents = {
-            "/etc/systemd/system-generators/ghaf-store-veritysetup-generator".source = "${cfg.package}/bin/nix-store-veritysetup-generator";
+            "/etc/systemd/system-generators/ghaf-store-veritysetup-generator".source =
+              "${cfg.package}/bin/nix-store-veritysetup-generator";
           };
 
           storePaths = [
